@@ -3,7 +3,11 @@
 
   const CHANNEL = "yt-transcript-copier";
   const HOST_ID = "yt-transcript-copier-root";
-  const DEFAULT_SETTINGS = { intervalSeconds: 60, includeVideoInfo: true };
+  const DEFAULT_SETTINGS = {
+    intervalSeconds: 60,
+    includeVideoInfo: true,
+    promptText: "Resuma este vídeo em 5 bullets."
+  };
   const pendingRequests = new Map();
   let currentVideoId = null;
   let tracks = [];
@@ -127,6 +131,13 @@
         .card.open .chevron { transform: rotate(180deg); }
         .body { display: none; padding: 0 12px 12px; border-top: 1px solid var(--tc-border); }
         .card.open .body { display: block; }
+        .prompt-label { margin-top: 10px; }
+        textarea {
+          display: block; width: 100%; min-height: 54px; max-height: 130px; margin-top: 3px; padding: 7px 8px;
+          resize: vertical; border: 1px solid var(--tc-border); border-radius: 7px;
+          color: var(--tc-text); background: var(--tc-surface); font-size: 12px; line-height: 1.4;
+        }
+        textarea::placeholder { color: var(--tc-muted); }
         .controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin: 10px 0; }
         label { display: block; min-width: 0; color: var(--tc-muted); font-size: 11px; line-height: 16px; }
         select {
@@ -164,6 +175,9 @@
           <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m7.4 8.6 4.6 4.6 4.6-4.6L18 10l-6 6-6-6 1.4-1.4Z"/></svg>
         </button>
         <div class="body" id="transcript-body">
+          <label class="prompt-label" for="prompt">Prompt copied above the transcript
+            <textarea id="prompt" rows="2" placeholder="Example: Summarize this video in 5 bullets"></textarea>
+          </label>
           <div class="controls">
             <label for="track">Language
               <select id="track" disabled><option>Loading...</option></select>
@@ -191,6 +205,7 @@
 
     const card = shadow.querySelector(".card");
     const header = shadow.querySelector(".header");
+    const promptInput = shadow.querySelector("#prompt");
     const trackSelect = shadow.querySelector("#track");
     const intervalSelect = shadow.querySelector("#interval");
     const videoInfo = shadow.querySelector("#video-info");
@@ -199,6 +214,7 @@
     const transcriptPreview = shadow.querySelector(".transcript");
     let formattedTranscript = "";
     let loadingTranscript = null;
+    let promptSaveTimer = null;
 
     function setStatus(message, isError = false) {
       status.textContent = message;
@@ -210,6 +226,7 @@
       formattedTranscript = YTTranscriptFormatter.formatTranscript(cachedTranscript.cues, {
         intervalSeconds: Number(intervalSelect.value),
         includeVideoInfo: videoInfo.checked,
+        prefixText: promptInput.value,
         title: document.title.replace(/\s*-\s*YouTube\s*$/, ""),
         url: canonicalVideoUrl()
       });
@@ -308,6 +325,11 @@
       saveSettings({ includeVideoInfo: videoInfo.checked });
       renderTranscript();
     });
+    promptInput.addEventListener("input", () => {
+      clearTimeout(promptSaveTimer);
+      promptSaveTimer = setTimeout(() => saveSettings({ promptText: promptInput.value }), 250);
+      renderTranscript();
+    });
 
     copyButton.addEventListener("click", async () => {
       copyButton.disabled = true;
@@ -328,6 +350,7 @@
       intervalSelect.value = String(settings.intervalSeconds);
       if (!intervalSelect.value) intervalSelect.value = String(DEFAULT_SETTINGS.intervalSeconds);
       videoInfo.checked = settings.includeVideoInfo;
+      promptInput.value = settings.promptText;
       renderTranscript();
     });
   }

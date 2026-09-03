@@ -33,32 +33,38 @@
   function formatTranscript(cues, options = {}) {
     const intervalSeconds = Number(options.intervalSeconds ?? 60);
     const includeVideoInfo = options.includeVideoInfo !== false;
+    const prefixText = String(options.prefixText || "").trim();
     const intervalMs = intervalSeconds * 1000;
-    const lines = [];
+    const sections = [];
+
+    if (prefixText) {
+      sections.push(prefixText);
+    }
 
     if (includeVideoInfo) {
-      if (options.title) lines.push(options.title.trim());
-      if (options.url) lines.push(options.url.trim());
-      if (lines.length) lines.push("");
+      const videoInfo = [];
+      if (options.title) videoInfo.push(options.title.trim());
+      if (options.url) videoInfo.push(options.url.trim());
+      if (videoInfo.length) sections.push(videoInfo.join("\n"));
     }
 
     if (!Array.isArray(cues) || cues.length === 0) {
-      return lines.join("\n").trim();
+      return sections.join("\n\n").trim();
     }
 
     if (intervalSeconds === 0) {
-      for (const cue of cues) {
-        lines.push(`[${formatTimestamp(cue.startMs)}] ${cue.text}`);
-      }
-      return lines.join("\n").trim();
+      const captionLines = cues.map((cue) => `[${formatTimestamp(cue.startMs)}] ${cue.text}`);
+      sections.push(captionLines.join("\n"));
+      return sections.join("\n\n").trim();
     }
 
     let blockStart = cues[0].startMs;
     let blockText = "";
+    const transcriptBlocks = [];
 
     for (const cue of cues) {
       if (blockText && cue.startMs - blockStart >= intervalMs) {
-        lines.push(`[${formatTimestamp(blockStart)}] ${blockText}`);
+        transcriptBlocks.push(`[${formatTimestamp(blockStart)}] ${blockText}`);
         blockStart = cue.startMs;
         blockText = "";
       }
@@ -66,10 +72,11 @@
     }
 
     if (blockText) {
-      lines.push(`[${formatTimestamp(blockStart)}] ${blockText}`);
+      transcriptBlocks.push(`[${formatTimestamp(blockStart)}] ${blockText}`);
     }
 
-    return lines.join("\n\n").trim();
+    sections.push(transcriptBlocks.join("\n\n"));
+    return sections.join("\n\n").trim();
   }
 
   function getStats(text) {

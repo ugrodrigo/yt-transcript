@@ -53,3 +53,20 @@ test("supports timestamps on every caption and video information", () => {
   assert.equal(text, "Example\nhttps://www.youtube.com/watch?v=abc\n\n[00:05] First cue.\n[00:09] Second cue.");
   assert.deepEqual(getStats(text), { timestampCount: 2, wordCount: 4 });
 });
+
+test("places an optional prompt above the video information and transcript", () => {
+  const text = formatTranscript([
+    { startMs: 0, text: "Transcript text." }
+  ], {
+    intervalSeconds: 60,
+    prefixText: "Summarize this video in 5 bullets.",
+    includeVideoInfo: true,
+    title: "Example",
+    url: "https://www.youtube.com/watch?v=abc"
+  });
+
+  assert.equal(
+    text,
+    "Summarize this video in 5 bullets.\n\nExample\nhttps://www.youtube.com/watch?v=abc\n\n[00:00] Transcript text."
+  );
+});

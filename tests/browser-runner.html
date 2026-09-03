@@ -30,6 +30,13 @@
   const stats = getStats(everyCue);
   check(stats.timestampCount === 2 && stats.wordCount === 4, "transcript stats");
 
+  const prompted = formatTranscript([{ startMs: 0, text: "Body" }], {
+    intervalSeconds: 60,
+    includeVideoInfo: false,
+    prefixText: "Summarize in five bullets."
+  });
+  check(prompted === "Summarize in five bullets.\n\n[00:00] Body", "prompt prefix");
+
   const jsonCues = parseCaptionPayload('{"events":[{"tStartMs":1200,"dDurationMs":800,"segs":[{"utf8":"Hello "},{"utf8":"JSON"}]}]}', "json3");
   check(jsonCues.length === 1 && jsonCues[0].text === "Hello JSON" && jsonCues[0].startMs === 1200, "JSON3 captions");
 

@@ -23,6 +23,8 @@ For Chrome, follow the same steps at `chrome://extensions`.
 
 The default output includes the video title, canonical link, and approximately one timestamp per minute.
 
+The prompt field is saved locally and copied above the video information and transcript. Its default text is `Resuma este vídeo em 5 bullets.` and it can be edited or left empty.
+
 ## Privacy
 
 The extension has no server, analytics, or account system. It reads the caption tracks exposed to the YouTube player and formats them locally. Settings are stored in the browser's extension storage.
