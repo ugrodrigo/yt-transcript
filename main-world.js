@@ -294,13 +294,37 @@
     }
   }
 
+  function suppressNativeTranscriptPanel() {
+    const style = document.createElement("style");
+    style.id = "yt-transcript-copier-panel-suppression";
+    style.textContent = `
+      ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"],
+      ytd-engagement-panel-section-list-renderer[target-id="PAmodern_transcript_view"] {
+        position: fixed !important;
+        top: 0 !important;
+        left: -10000px !important;
+        width: 420px !important;
+        height: 80vh !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        z-index: -1 !important;
+      }
+    `;
+    document.documentElement.appendChild(style);
+    return () => style.remove();
+  }
+
   async function openAndReadNativeTranscriptPanel() {
     const existing = readOpenTranscriptPanel();
     if (existing.length) {
+      const stopSuppressing = suppressNativeTranscriptPanel();
       const scope = transcriptScope();
-      const collected = await collectAllTranscriptSegments();
-      await closeNativeTranscriptPanel(scope);
-      return collected;
+      try {
+        return await collectAllTranscriptSegments();
+      } finally {
+        await closeNativeTranscriptPanel(scope);
+        stopSuppressing();
+      }
     }
 
     let transcriptButton = findNativeTranscriptButton();
@@ -319,13 +343,22 @@
     }
 
     if (!transcriptButton) throw new Error("native transcript button not found");
-    transcriptButton.click();
-    const cues = await waitForTranscriptSegments(10000);
-    if (!cues.length) throw new Error("native transcript panel opened without segments");
-    const scope = transcriptScope();
-    const collected = await collectAllTranscriptSegments();
-    await closeNativeTranscriptPanel(scope);
-    return collected;
+    const stopSuppressing = suppressNativeTranscriptPanel();
+    let scope = null;
+    try {
+      transcriptButton.click();
+      const cues = await waitForTranscriptSegments(10000);
+      if (!cues.length) throw new Error("native transcript panel opened without segments");
+      scope = transcriptScope();
+      return await collectAllTranscriptSegments();
+    } finally {
+      scope ||= document.querySelector(
+        "ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-searchable-transcript'], "
+        + "ytd-engagement-panel-section-list-renderer[target-id='PAmodern_transcript_view']"
+      );
+      if (scope) await closeNativeTranscriptPanel(scope);
+      stopSuppressing();
+    }
   }
 
   async function fetchTrack(trackId) {
