@@ -2,6 +2,8 @@
 
 A small, local-only extension for Brave, Chrome, Edge, and other Chromium browsers. It adds a compact transcript accordion to YouTube's right sidebar and formats captions with occasional timestamps.
 
+The sidebar card keeps YouTube's standard 12-pixel spacing from the suggested-video controls below it.
+
 ## Install in Brave
 
 1. Open `brave://extensions`.

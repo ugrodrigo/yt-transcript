@@ -107,7 +107,7 @@
         :host {
           --tc-bg: #fff; --tc-surface: #f8f8f8; --tc-text: #0f0f0f; --tc-muted: #606060;
           --tc-border: #d9d9d9; --tc-hover: #f2f2f2; --tc-error: #c00;
-          display: block; width: 100%; margin: 0 0 12px; font-family: Roboto, Arial, sans-serif; color-scheme: light;
+          display: block; width: 100%; margin: 0; font-family: Roboto, Arial, sans-serif; color-scheme: light;
         }
         :host([data-theme="dark"]) {
           --tc-bg: #212121; --tc-surface: #181818; --tc-text: #f1f1f1; --tc-muted: #aaa;
@@ -387,6 +387,7 @@
     const host = document.createElement("div");
     host.id = HOST_ID;
     host.dataset.theme = pageUsesDarkTheme() ? "dark" : "light";
+    host.style.cssText = "display:block;width:100%;box-sizing:border-box;padding-bottom:12px";
     target.prepend(host);
     createUi(host);
   }
