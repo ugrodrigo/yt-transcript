@@ -1,4 +1,4 @@
-# YouTube Transcript Copier
+# YouTube Transcript
 
 A small, local-only extension for Brave, Chrome, Edge, and other Chromium browsers. It adds a compact transcript accordion to YouTube's right sidebar and formats captions with occasional timestamps.
 
@@ -19,7 +19,7 @@ For Chrome, follow the same steps at `chrome://extensions`.
 ## Use it
 
 1. Open a regular YouTube video.
-2. Open **Transcript Copier** in the right sidebar.
+2. Open **YouTube Transcript** in the right sidebar.
 3. Choose a caption language and timestamp spacing while previewing the transcript.
 4. Click **Copy transcript**.
 

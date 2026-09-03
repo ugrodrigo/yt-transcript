@@ -505,7 +505,7 @@
       failures.push(`page panel: ${error instanceof Error ? error.message : "failed"}`);
     }
 
-    console.warn("YouTube Transcript Copier caption attempts failed:", failures);
+    console.warn("YouTube Transcript caption attempts failed:", failures);
     const summary = failures.slice(-2).join("; ");
     throw new Error(`YouTube blocked every transcript method (${summary}).`);
   }

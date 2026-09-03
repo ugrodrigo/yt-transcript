@@ -170,7 +170,7 @@
         <button class="header" type="button" aria-expanded="false" aria-controls="transcript-body">
           <span class="header-title">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 2H6v16h12V8h-4V4Zm-5 8h6v2H9v-2Zm0 4h6v2H9v-2Z"/></svg>
-            <span>Transcript Copier</span>
+            <span>YouTube Transcript</span>
           </span>
           <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m7.4 8.6 4.6 4.6 4.6-4.6L18 10l-6 6-6-6 1.4-1.4Z"/></svg>
         </button>
@@ -338,7 +338,7 @@
         if (!formattedTranscript) return;
         await copyText(formattedTranscript);
         const stats = YTTranscriptFormatter.getStats(formattedTranscript);
-        setStatus(`Copied ${stats.wordCount.toLocaleString()} words with ${stats.timestampCount} timestamps.`);
+        setStatus(`✓ Copied ${stats.wordCount.toLocaleString()} words with ${stats.timestampCount} timestamps.`);
       } catch (error) {
         setStatus(error.message, true);
       } finally {
