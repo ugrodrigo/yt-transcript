@@ -120,6 +120,90 @@
     return JSON.parse(text);
   }
 
+  const MOBILE_PLAYER_CLIENTS = [
+    {
+      clientName: "ANDROID",
+      clientVersion: "20.10.38",
+      androidSdkVersion: 35,
+      hl: "en",
+      gl: "US"
+    },
+    {
+      clientName: "IOS",
+      clientVersion: "20.10.4",
+      deviceMake: "Apple",
+      deviceModel: "iPhone16,2",
+      osName: "iPhone",
+      osVersion: "18.3.1.22D72",
+      hl: "en",
+      gl: "US"
+    }
+  ];
+
+  async function fetchMobilePlayerTranscript(selectedTrack) {
+    const apiKey = getYouTubeConfig("INNERTUBE_API_KEY");
+    let videoId = new URL(location.href).searchParams.get("v");
+    try {
+      videoId ||= new URL(selectedTrack.baseUrl).searchParams.get("v");
+    } catch (_) {
+      // The page URL remains the primary source for the video id.
+    }
+    if (!apiKey || !videoId) {
+      throw new Error("mobile player configuration is unavailable");
+    }
+
+    const failures = [];
+    for (const client of MOBILE_PLAYER_CLIENTS) {
+      try {
+        const response = await fetch(`/youtubei/v1/player?key=${encodeURIComponent(apiKey)}&prettyPrint=false`, {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            context: { client },
+            videoId,
+            contentCheckOk: true,
+            racyCheckOk: true
+          })
+        });
+        if (!response.ok) {
+          failures.push(`${client.clientName}: HTTP ${response.status}`);
+          continue;
+        }
+
+        const playerData = await response.json();
+        const tracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+        const matchingTrack = tracks.find((track) => (
+          track.languageCode === selectedTrack.languageCode && (track.kind || "manual") === selectedTrack.kind
+        )) || tracks.find((track) => track.languageCode === selectedTrack.languageCode);
+        if (!matchingTrack?.baseUrl) {
+          failures.push(`${client.clientName}: matching track unavailable`);
+          continue;
+        }
+
+        for (const format of ["json3", "srv3", "vtt"]) {
+          const captionUrl = new URL(matchingTrack.baseUrl);
+          captionUrl.searchParams.set("fmt", format);
+          const captionResponse = await fetch(captionUrl.toString(), {
+            credentials: "include",
+            cache: "no-store"
+          });
+          const body = await captionResponse.text();
+          if (!captionResponse.ok || !body.trim()) continue;
+
+          const cues = YTTranscriptCaptionParser.parseCaptionPayload(body, format);
+          if (cues.length) return cues;
+        }
+        failures.push(`${client.clientName}: empty captions`);
+      } catch (error) {
+        failures.push(`${client.clientName}: ${error instanceof Error ? error.message : "failed"}`);
+      }
+    }
+
+    throw new Error(failures.join(", ") || "mobile player returned no captions");
+  }
+
   async function fetchTranscriptPanel() {
     const videoId = new URL(location.href).searchParams.get("v");
     const watchData = document.querySelector("ytd-watch-flexy")?.data;
@@ -398,6 +482,13 @@
       } catch (error) {
         failures.push(`${format}: ${error instanceof Error ? error.message : "unreadable response"}`);
       }
+    }
+
+    try {
+      const cues = await fetchMobilePlayerTranscript(track);
+      return { track: { ...track, baseUrl: undefined }, cues };
+    } catch (error) {
+      failures.push(`mobile player: ${error instanceof Error ? error.message : "failed"}`);
     }
 
     try {

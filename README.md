@@ -42,6 +42,7 @@ The extension has no server, analytics, or account system. It reads the caption 
 
 - If the blue button is missing, reload the extension at `brave://extensions`, then fully refresh the YouTube tab.
 - If YouTube returns empty captions, the extension automatically falls back to YouTube's transcript-panel API and can open/read both current and legacy versions of YouTube's native transcript panel itself.
+- If a proof-token caption URL returns an empty response, the extension retries through YouTube's official mobile player before using a visible-page fallback.
 - The temporary native YouTube transcript panel is closed after its contents are transferred into the extension's sidebar.
 - While that fallback runs, the native panel is rendered off-screen so it does not flash beside the extension.
 

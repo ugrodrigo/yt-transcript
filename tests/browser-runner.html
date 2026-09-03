@@ -51,6 +51,54 @@
   ] } }] });
   check(panelCues.length === 1 && panelCues[0].text === "Hello panel" && panelCues[0].startMs === 4000, "transcript panel captions");
 
+  async function testMobilePlayerFallback() {
+    window.ytInitialPlayerResponse = {
+      videoDetails: { videoId: null },
+      captions: { playerCaptionsTracklistRenderer: { captionTracks: [{
+        baseUrl: "https://example.invalid/captions?exp=xpe&v=mobile-test",
+        languageCode: "pt",
+        kind: "asr",
+        name: { simpleText: "Portuguese (auto-generated)" }
+      }] } }
+    };
+
+    const originalFetch = window.fetch;
+    const originalYtcfg = window.ytcfg;
+    window.ytcfg = { get: (name) => name === "INNERTUBE_API_KEY" ? "test-key" : null };
+    window.fetch = async (url) => {
+      const value = String(url);
+      if (value.includes("/youtubei/v1/player")) {
+        return new Response(JSON.stringify({ captions: { playerCaptionsTracklistRenderer: { captionTracks: [{
+          baseUrl: "https://example.invalid/mobile-captions",
+          languageCode: "pt",
+          kind: "asr"
+        }] } } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (value.startsWith("https://example.invalid/mobile-captions")) {
+        return new Response('{"events":[{"tStartMs":9000,"dDurationMs":1000,"segs":[{"utf8":"Mobile fallback works"}]}]}', { status: 200 });
+      }
+      return originalFetch(url);
+    };
+
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("mobile player fallback timed out")), 3000);
+        const listener = (event) => {
+          if (event.data?.channel !== "yt-transcript-copier" || event.data?.requestId !== "mobile-player-test" || event.data?.direction !== "response") return;
+          clearTimeout(timeout);
+          window.removeEventListener("message", listener);
+          resolve(event.data);
+        };
+        window.addEventListener("message", listener);
+        window.postMessage({ channel: "yt-transcript-copier", direction: "request", requestId: "mobile-player-test", action: "transcript", trackId: "0" }, "*");
+      });
+      check(response.ok && response.result.cues[0].text === "Mobile fallback works" && response.result.cues[0].startMs === 9000, "mobile player caption fallback");
+    } finally {
+      window.fetch = originalFetch;
+      window.ytcfg = originalYtcfg;
+    }
+  }
+
   async function testNativePanelFallback() {
     window.ytInitialPlayerResponse = {
       videoDetails: { videoId: null },
@@ -88,7 +136,8 @@
     check(response.ok && response.result.cues[0].text === "Modern native fallback works" && response.result.cues[0].startMs === 7000, "automatic modern native panel fallback");
   }
 
-  testNativePanelFallback()
+  testMobilePlayerFallback()
+    .then(testNativePanelFallback)
     .catch((error) => failures.push(error.message))
     .finally(() => {
       const result = failures.length ? `FAIL: ${failures.join(", ")}` : "PASS";
