@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RUNNING</title>
+<pre id="result">RUNNING</pre>
+<script src="../formatter.js"></script>
+<script src="../caption-parser.js"></script>
+<script src="../main-world.js"></script>
+<script src="../content.js"></script>
+<script>
+  const failures = [];
+  const check = (condition, message) => { if (!condition) failures.push(message); };
+  const { formatTimestamp, formatTranscript, getStats } = YTTranscriptFormatter;
+  const { parseCaptionPayload } = YTTranscriptCaptionParser;
+
+  check(formatTimestamp(0) === "00:00", "zero timestamp");
+  check(formatTimestamp(65999) === "01:05", "minute timestamp");
+  check(formatTimestamp(3661000) === "1:01:01", "hour timestamp");
+
+  const grouped = formatTranscript([
+    { startMs: 0, text: "Hello" },
+    { startMs: 10000, text: "world." },
+    { startMs: 61000, text: "Next minute." }
+  ], { intervalSeconds: 60, includeVideoInfo: false });
+  check(grouped === "[00:00] Hello world.\n\n[01:01] Next minute.", "cue grouping");
+
+  const everyCue = formatTranscript([
+    { startMs: 5000, text: "First cue." },
+    { startMs: 9000, text: "Second cue." }
+  ], { intervalSeconds: 0, includeVideoInfo: true, title: "Example", url: "https://www.youtube.com/watch?v=abc" });
+  const stats = getStats(everyCue);
+  check(stats.timestampCount === 2 && stats.wordCount === 4, "transcript stats");
+
+  const jsonCues = parseCaptionPayload('{"events":[{"tStartMs":1200,"dDurationMs":800,"segs":[{"utf8":"Hello "},{"utf8":"JSON"}]}]}', "json3");
+  check(jsonCues.length === 1 && jsonCues[0].text === "Hello JSON" && jsonCues[0].startMs === 1200, "JSON3 captions");
+
+  const xmlCues = parseCaptionPayload('<timedtext><body><p t="2500" d="900"><s>Hello XML</s></p></body></timedtext>', "srv3");
+  check(xmlCues.length === 1 && xmlCues[0].text === "Hello XML" && xmlCues[0].startMs === 2500, "XML captions");
+
+  const vttCues = parseCaptionPayload('WEBVTT\n\n00:00:03.000 --> 00:00:04.500\nHello VTT', "vtt");
+  check(vttCues.length === 1 && vttCues[0].text === "Hello VTT" && vttCues[0].startMs === 3000, "WebVTT captions");
+
+  const panelCues = YTTranscriptCaptionParser.parseTranscriptPanel({ actions: [{ content: { initialSegments: [
+    { transcriptSegmentRenderer: { startMs: "4000", endMs: "5500", snippet: { runs: [{ text: "Hello panel" }] }, startTimeText: { simpleText: "0:04" } } }
+  ] } }] });
+  check(panelCues.length === 1 && panelCues[0].text === "Hello panel" && panelCues[0].startMs === 4000, "transcript panel captions");
+
+  async function testNativePanelFallback() {
+    window.ytInitialPlayerResponse = {
+      videoDetails: { videoId: null },
+      captions: { playerCaptionsTracklistRenderer: { captionTracks: [{
+        baseUrl: "https://example.invalid/captions?exp=xpe",
+        languageCode: "en",
+        name: { simpleText: "English" }
+      }] } }
+    };
+
+    const section = document.createElement("ytd-video-description-transcript-section-renderer");
+    const button = document.createElement("button");
+    button.textContent = "Show transcript";
+    button.addEventListener("click", () => {
+      const segment = document.createElement("transcript-segment-view-model");
+      segment.className = "ytwTranscriptSegmentViewModelHost";
+      segment.innerHTML = '<span class="ytwTranscriptSegmentViewModelTimestamp">0:07</span><span class="ytAttributedStringHost" role="text">Modern native fallback works</span>';
+      document.body.appendChild(segment);
+    }, { once: true });
+    section.appendChild(button);
+    document.body.appendChild(section);
+
+    const response = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("native panel fallback timed out")), 3000);
+      const listener = (event) => {
+        if (event.data?.channel !== "yt-transcript-copier" || event.data?.requestId !== "native-panel-test" || event.data?.direction !== "response") return;
+        clearTimeout(timeout);
+        window.removeEventListener("message", listener);
+        resolve(event.data);
+      };
+      window.addEventListener("message", listener);
+      window.postMessage({ channel: "yt-transcript-copier", direction: "request", requestId: "native-panel-test", action: "transcript", trackId: "0" }, "*");
+    });
+
+    check(response.ok && response.result.cues[0].text === "Modern native fallback works" && response.result.cues[0].startMs === 7000, "automatic modern native panel fallback");
+  }
+
+  testNativePanelFallback()
+    .catch((error) => failures.push(error.message))
+    .finally(() => {
+      const result = failures.length ? `FAIL: ${failures.join(", ")}` : "PASS";
+      document.title = result;
+      document.getElementById("result").textContent = result;
+    });
+</script>
