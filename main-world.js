@@ -278,9 +278,30 @@
     return [...collected.values()].sort((a, b) => a.startMs - b.startMs);
   }
 
+  async function closeNativeTranscriptPanel(scope) {
+    if (!scope || scope === document) return;
+    const closeButton = scope.querySelector(
+      "#visibility-button button, #visibility-button yt-button-shape button, #dismiss-button button, "
+      + "ytd-engagement-panel-title-header-renderer #visibility-button, "
+      + "button[aria-label*='Close' i], button[aria-label*='Fechar' i]"
+    );
+    closeButton?.click();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    if (scope.getAttribute("visibility") !== "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN") {
+      scope.visibility = "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN";
+      scope.setAttribute("visibility", "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN");
+    }
+  }
+
   async function openAndReadNativeTranscriptPanel() {
     const existing = readOpenTranscriptPanel();
-    if (existing.length) return collectAllTranscriptSegments();
+    if (existing.length) {
+      const scope = transcriptScope();
+      const collected = await collectAllTranscriptSegments();
+      await closeNativeTranscriptPanel(scope);
+      return collected;
+    }
 
     let transcriptButton = findNativeTranscriptButton();
     if (!transcriptButton) {
@@ -301,7 +322,10 @@
     transcriptButton.click();
     const cues = await waitForTranscriptSegments(10000);
     if (!cues.length) throw new Error("native transcript panel opened without segments");
-    return collectAllTranscriptSegments();
+    const scope = transcriptScope();
+    const collected = await collectAllTranscriptSegments();
+    await closeNativeTranscriptPanel(scope);
+    return collected;
   }
 
   async function fetchTrack(trackId) {

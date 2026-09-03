@@ -1,6 +1,6 @@
 # YouTube Transcript Copier
 
-A small, local-only extension for Brave, Chrome, Edge, and other Chromium browsers. It adds a **Copy transcript** button to YouTube video pages and formats captions with occasional timestamps.
+A small, local-only extension for Brave, Chrome, Edge, and other Chromium browsers. It adds a compact transcript accordion to YouTube's right sidebar and formats captions with occasional timestamps.
 
 ## Install in Brave
 
@@ -17,9 +17,9 @@ For Chrome, follow the same steps at `chrome://extensions`.
 ## Use it
 
 1. Open a regular YouTube video.
-2. Click **Copy transcript** alongside YouTube's video action buttons.
-3. Choose a caption language and timestamp spacing.
-4. Click **Copy to clipboard**.
+2. Open **Transcript Copier** in the right sidebar.
+3. Choose a caption language and timestamp spacing while previewing the transcript.
+4. Click **Copy transcript**.
 
 The default output includes the video title, canonical link, and approximately one timestamp per minute.
 
@@ -38,6 +38,7 @@ The extension has no server, analytics, or account system. It reads the caption 
 
 - If the blue button is missing, reload the extension at `brave://extensions`, then fully refresh the YouTube tab.
 - If YouTube returns empty captions, the extension automatically falls back to YouTube's transcript-panel API and can open/read both current and legacy versions of YouTube's native transcript panel itself.
+- The temporary native YouTube transcript panel is closed after its contents are transferred into the extension's sidebar.
 
 ## Development
 

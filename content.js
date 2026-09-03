@@ -9,7 +9,6 @@
   let tracks = [];
   let cachedTranscript = null;
   let mountTimer = null;
-  let cleanupCurrentUi = null;
 
   function requestMainWorld(action, extra = {}) {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -78,90 +77,152 @@
   }
 
   function targetContainer() {
-    return document.querySelector("ytd-watch-metadata #top-row #actions")
-      || document.querySelector("ytd-watch-metadata #top-row")
-      || document.querySelector("#above-the-fold #top-row");
+    return document.querySelector("#secondary-inner")
+      || document.querySelector("ytd-watch-flexy #secondary");
+  }
+
+  function pageUsesDarkTheme() {
+    if (document.documentElement.hasAttribute("dark") || document.querySelector("ytd-app")?.hasAttribute("dark")) {
+      return true;
+    }
+    const background = getComputedStyle(document.documentElement)
+      .getPropertyValue("--yt-spec-base-background")
+      .match(/\d+/g)
+      ?.slice(0, 3)
+      .map(Number);
+    if (background?.length === 3) {
+      return (background[0] * 299 + background[1] * 587 + background[2] * 114) / 1000 < 128;
+    }
+    return matchMedia("(prefers-color-scheme: dark)").matches;
   }
 
   function createUi(host) {
     const shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
       <style>
-        :host { display: inline-flex; align-items: center; position: relative; margin-left: 8px; font-family: Roboto, Arial, sans-serif; }
+        :host {
+          --tc-bg: #fff; --tc-surface: #f8f8f8; --tc-text: #0f0f0f; --tc-muted: #606060;
+          --tc-border: #d9d9d9; --tc-hover: #f2f2f2; --tc-error: #c00;
+          display: block; width: 100%; margin: 0 0 12px; font-family: Roboto, Arial, sans-serif; color-scheme: light;
+        }
+        :host([data-theme="dark"]) {
+          --tc-bg: #212121; --tc-surface: #181818; --tc-text: #f1f1f1; --tc-muted: #aaa;
+          --tc-border: #3f3f3f; --tc-hover: #303030; --tc-error: #ff6b6b; color-scheme: dark;
+        }
         * { box-sizing: border-box; }
         button, select, input { font: inherit; }
-        .trigger {
-          min-height: 36px; border: 0; border-radius: 18px; padding: 0 16px; cursor: pointer;
-          color: #fff; background: #065fd4;
-          font-size: 14px; font-weight: 500; white-space: nowrap;
+        .card {
+          overflow: hidden; width: 100%; border: 1px solid var(--tc-border);
+          border-radius: 12px; color: var(--tc-text); background: var(--tc-bg);
         }
-        .trigger:hover { background: #0556bf; }
-        .panel {
-          display: none; position: absolute; z-index: 2200; top: 44px; right: 0; width: 310px; padding: 16px;
-          border: 1px solid var(--yt-spec-10-percent-layer, rgba(0,0,0,.1)); border-radius: 12px;
-          color: var(--yt-spec-text-primary, #0f0f0f); background: var(--yt-spec-menu-background, #fff);
-          box-shadow: 0 6px 24px rgba(0,0,0,.22);
+        .header {
+          display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px;
+          border: 0; padding: 0 14px; cursor: pointer; color: inherit; background: transparent;
+          font-size: 14px; font-weight: 600; text-align: left;
         }
-        .panel.open { display: block; }
-        .heading { margin: 0 0 14px; font-size: 16px; font-weight: 600; }
-        label { display: block; margin: 12px 0 6px; color: var(--yt-spec-text-secondary, #606060); font-size: 12px; }
+        .header:hover { background: var(--tc-hover); }
+        .header-title { display: inline-flex; align-items: center; gap: 9px; }
+        .icon { width: 20px; height: 20px; color: #065fd4; }
+        .chevron { width: 18px; height: 18px; transition: transform 160ms ease; }
+        .card.open .chevron { transform: rotate(180deg); }
+        .body { display: none; padding: 0 12px 12px; border-top: 1px solid var(--tc-border); }
+        .card.open .body { display: block; }
+        .controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin: 10px 0; }
+        label { display: block; min-width: 0; color: var(--tc-muted); font-size: 11px; line-height: 16px; }
         select {
-          width: 100%; height: 36px; padding: 0 9px; border: 1px solid var(--yt-spec-10-percent-layer, #ccc); border-radius: 7px;
-          color: inherit; background: var(--yt-spec-general-background-a, #fff);
+          display: block; width: 100%; height: 32px; margin-top: 3px; padding: 0 7px;
+          border: 1px solid var(--tc-border); border-radius: 7px;
+          color: var(--tc-text); background: var(--tc-surface);
+          font-size: 11px;
         }
-        .check { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: inherit; font-size: 13px; cursor: pointer; }
+        .transcript {
+          min-height: 150px; max-height: 390px; overflow-y: auto; padding: 10px;
+          border: 1px solid var(--tc-border); border-radius: 8px;
+          color: var(--tc-text); background: var(--tc-surface);
+          font-size: 13px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+          scrollbar-width: thin;
+        }
+        .transcript.placeholder { color: var(--tc-muted); }
+        .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
+        .check { display: flex; align-items: center; gap: 6px; margin: 0; color: inherit; font-size: 11px; cursor: pointer; }
         .check input { margin: 0; }
         .copy {
-          width: 100%; height: 38px; border: 0; border-radius: 19px; cursor: pointer; color: #fff; background: #065fd4;
-          font-size: 14px; font-weight: 600;
+          flex: 0 0 auto; height: 32px; border: 0; border-radius: 16px; padding: 0 14px;
+          cursor: pointer; color: #fff; background: #065fd4; font-size: 12px; font-weight: 600;
         }
         .copy:hover { background: #0556bf; }
         .copy:disabled, select:disabled { cursor: wait; opacity: .6; }
-        .status { min-height: 18px; margin: 10px 0 0; color: var(--yt-spec-text-secondary, #606060); font-size: 12px; line-height: 18px; }
-        .status.error { color: #c00; }
-        @media (prefers-color-scheme: dark) {
-          .panel { background: var(--yt-spec-menu-background, #212121); color: var(--yt-spec-text-primary, #f1f1f1); }
-          select { background: var(--yt-spec-general-background-a, #212121); }
-        }
+        .status { min-height: 16px; margin: 0 0 8px; color: var(--tc-muted); font-size: 11px; line-height: 16px; }
+        .status.error { color: var(--tc-error); }
       </style>
-      <button class="trigger" type="button" aria-expanded="false">Copy transcript</button>
-      <section class="panel" aria-label="Transcript copier">
-        <p class="heading">Copy transcript</p>
-        <label for="track">Caption language</label>
-        <select id="track" disabled><option>Loading…</option></select>
-        <label for="interval">Add a timestamp</label>
-        <select id="interval">
-          <option value="0">For every caption</option>
-          <option value="15">About every 15 seconds</option>
-          <option value="30">About every 30 seconds</option>
-          <option value="60">About every minute</option>
-          <option value="120">About every 2 minutes</option>
-          <option value="300">About every 5 minutes</option>
-        </select>
-        <label class="check"><input id="video-info" type="checkbox" checked> Include video title and link</label>
-        <button class="copy" type="button" disabled>Copy to clipboard</button>
-        <p class="status" role="status" aria-live="polite"></p>
+      <section class="card" aria-label="Transcript copier">
+        <button class="header" type="button" aria-expanded="false" aria-controls="transcript-body">
+          <span class="header-title">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 2H6v16h12V8h-4V4Zm-5 8h6v2H9v-2Zm0 4h6v2H9v-2Z"/></svg>
+            <span>Transcript Copier</span>
+          </span>
+          <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m7.4 8.6 4.6 4.6 4.6-4.6L18 10l-6 6-6-6 1.4-1.4Z"/></svg>
+        </button>
+        <div class="body" id="transcript-body">
+          <div class="controls">
+            <label for="track">Language
+              <select id="track" disabled><option>Loading...</option></select>
+            </label>
+            <label for="interval">Timestamps
+              <select id="interval">
+                <option value="0">Every caption</option>
+                <option value="15">Every 15 seconds</option>
+                <option value="30">Every 30 seconds</option>
+                <option value="60">Every minute</option>
+                <option value="120">Every 2 minutes</option>
+                <option value="300">Every 5 minutes</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions">
+            <label class="check"><input id="video-info" type="checkbox" checked> Include title and link</label>
+            <button class="copy" type="button" disabled>Copy transcript</button>
+          </div>
+          <p class="status" role="status" aria-live="polite"></p>
+          <div class="transcript placeholder" role="region" aria-label="Transcript preview">Open to load the transcript.</div>
+        </div>
       </section>
     `;
 
-    const trigger = shadow.querySelector(".trigger");
-    const panel = shadow.querySelector(".panel");
+    const card = shadow.querySelector(".card");
+    const header = shadow.querySelector(".header");
     const trackSelect = shadow.querySelector("#track");
     const intervalSelect = shadow.querySelector("#interval");
     const videoInfo = shadow.querySelector("#video-info");
     const copyButton = shadow.querySelector(".copy");
     const status = shadow.querySelector(".status");
+    const transcriptPreview = shadow.querySelector(".transcript");
+    let formattedTranscript = "";
+    let loadingTranscript = null;
 
     function setStatus(message, isError = false) {
       status.textContent = message;
       status.classList.toggle("error", isError);
     }
 
+    function renderTranscript() {
+      if (!cachedTranscript?.cues?.length) return "";
+      formattedTranscript = YTTranscriptFormatter.formatTranscript(cachedTranscript.cues, {
+        intervalSeconds: Number(intervalSelect.value),
+        includeVideoInfo: videoInfo.checked,
+        title: document.title.replace(/\s*-\s*YouTube\s*$/, ""),
+        url: canonicalVideoUrl()
+      });
+      transcriptPreview.textContent = formattedTranscript;
+      transcriptPreview.classList.remove("placeholder");
+      return formattedTranscript;
+    }
+
     async function loadTracks() {
       trackSelect.disabled = true;
       copyButton.disabled = true;
-      trackSelect.innerHTML = "<option>Loading…</option>";
-      setStatus("Looking for captions…");
+      trackSelect.innerHTML = "<option>Loading...</option>";
+      setStatus("Looking for captions...");
 
       try {
         const result = await requestMainWorld("tracks");
@@ -176,61 +237,90 @@
           trackSelect.appendChild(option);
         }
         trackSelect.disabled = false;
-        copyButton.disabled = false;
         setStatus(`${tracks.length} caption track${tracks.length === 1 ? "" : "s"} available.`);
+        return true;
       } catch (error) {
         trackSelect.innerHTML = "<option>No captions found</option>";
+        transcriptPreview.textContent = error.message;
         setStatus(error.message, true);
+        return false;
       }
     }
 
-    trigger.addEventListener("click", async () => {
-      const willOpen = !panel.classList.contains("open");
-      panel.classList.toggle("open", willOpen);
-      trigger.setAttribute("aria-expanded", String(willOpen));
-      if (willOpen && tracks.length === 0) await loadTracks();
-    });
-
-    const closeOnOutsideClick = (event) => {
-      if (!host.contains(event.target) && panel.classList.contains("open")) {
-        panel.classList.remove("open");
-        trigger.setAttribute("aria-expanded", "false");
+    async function loadSelectedTranscript() {
+      if (!trackSelect.value || trackSelect.disabled) return;
+      if (cachedTranscript?.trackId === trackSelect.value) {
+        renderTranscript();
+        copyButton.disabled = false;
+        return;
       }
-    };
-    document.addEventListener("click", closeOnOutsideClick, true);
-    cleanupCurrentUi = () => document.removeEventListener("click", closeOnOutsideClick, true);
+      if (loadingTranscript) return loadingTranscript;
 
-    trackSelect.addEventListener("change", () => {
-      cachedTranscript = null;
-      setStatus("");
+      const requestedTrackId = trackSelect.value;
+      copyButton.disabled = true;
+      trackSelect.disabled = true;
+      transcriptPreview.textContent = "Loading transcript...";
+      transcriptPreview.classList.add("placeholder");
+      setStatus("YouTube may briefly open its transcript panel.");
+
+      loadingTranscript = requestMainWorld("transcript", { trackId: requestedTrackId })
+        .then((result) => {
+          cachedTranscript = { trackId: requestedTrackId, cues: result.cues };
+          renderTranscript();
+          copyButton.disabled = false;
+          const stats = YTTranscriptFormatter.getStats(formattedTranscript);
+          setStatus(`${stats.wordCount.toLocaleString()} words · ${stats.timestampCount} timestamps`);
+        })
+        .catch((error) => {
+          cachedTranscript = null;
+          formattedTranscript = "";
+          transcriptPreview.textContent = error.message;
+          transcriptPreview.classList.add("placeholder");
+          setStatus(error.message, true);
+        })
+        .finally(() => {
+          trackSelect.disabled = tracks.length === 0;
+          loadingTranscript = null;
+        });
+      return loadingTranscript;
+    }
+
+    header.addEventListener("click", async () => {
+      const willOpen = !card.classList.contains("open");
+      card.classList.toggle("open", willOpen);
+      header.setAttribute("aria-expanded", String(willOpen));
+      if (!willOpen) return;
+      if (tracks.length === 0 && !(await loadTracks())) return;
+      await loadSelectedTranscript();
     });
 
-    intervalSelect.addEventListener("change", () => saveSettings({ intervalSeconds: Number(intervalSelect.value) }));
-    videoInfo.addEventListener("change", () => saveSettings({ includeVideoInfo: videoInfo.checked }));
+    trackSelect.addEventListener("change", async () => {
+      cachedTranscript = null;
+      formattedTranscript = "";
+      await loadSelectedTranscript();
+    });
+
+    intervalSelect.addEventListener("change", () => {
+      saveSettings({ intervalSeconds: Number(intervalSelect.value) });
+      renderTranscript();
+    });
+    videoInfo.addEventListener("change", () => {
+      saveSettings({ includeVideoInfo: videoInfo.checked });
+      renderTranscript();
+    });
 
     copyButton.addEventListener("click", async () => {
       copyButton.disabled = true;
-      setStatus("Preparing transcript…");
       try {
-        if (!cachedTranscript || cachedTranscript.trackId !== trackSelect.value) {
-          const result = await requestMainWorld("transcript", { trackId: trackSelect.value });
-          cachedTranscript = { trackId: trackSelect.value, cues: result.cues };
-        }
-
-        const transcript = YTTranscriptFormatter.formatTranscript(cachedTranscript.cues, {
-          intervalSeconds: Number(intervalSelect.value),
-          includeVideoInfo: videoInfo.checked,
-          title: document.title.replace(/\s*-\s*YouTube\s*$/, ""),
-          url: canonicalVideoUrl()
-        });
-        await copyText(transcript);
-        const stats = YTTranscriptFormatter.getStats(transcript);
+        if (!formattedTranscript) await loadSelectedTranscript();
+        if (!formattedTranscript) return;
+        await copyText(formattedTranscript);
+        const stats = YTTranscriptFormatter.getStats(formattedTranscript);
         setStatus(`Copied ${stats.wordCount.toLocaleString()} words with ${stats.timestampCount} timestamps.`);
       } catch (error) {
-        cachedTranscript = null;
         setStatus(error.message, true);
       } finally {
-        copyButton.disabled = tracks.length === 0;
+        copyButton.disabled = !formattedTranscript;
       }
     });
 
@@ -238,6 +328,7 @@
       intervalSelect.value = String(settings.intervalSeconds);
       if (!intervalSelect.value) intervalSelect.value = String(DEFAULT_SETTINGS.intervalSeconds);
       videoInfo.checked = settings.includeVideoInfo;
+      renderTranscript();
     });
   }
 
@@ -246,8 +337,6 @@
     const existing = document.getElementById(HOST_ID);
 
     if (!videoId) {
-      cleanupCurrentUi?.();
-      cleanupCurrentUi = null;
       existing?.remove();
       currentVideoId = null;
       tracks = [];
@@ -257,8 +346,6 @@
     }
 
     if (videoId !== currentVideoId) {
-      cleanupCurrentUi?.();
-      cleanupCurrentUi = null;
       existing?.remove();
       currentVideoId = videoId;
       tracks = [];
@@ -266,13 +353,17 @@
       cancelPendingRequests();
     }
 
-    if (document.getElementById(HOST_ID)) return;
+    const mounted = document.getElementById(HOST_ID);
+    if (mounted) {
+      mounted.dataset.theme = pageUsesDarkTheme() ? "dark" : "light";
+      return;
+    }
     const target = targetContainer();
     if (!target) return;
 
-    cleanupCurrentUi?.();
-    const host = document.createElement("span");
+    const host = document.createElement("div");
     host.id = HOST_ID;
+    host.dataset.theme = pageUsesDarkTheme() ? "dark" : "light";
     target.prepend(host);
     createUi(host);
   }
